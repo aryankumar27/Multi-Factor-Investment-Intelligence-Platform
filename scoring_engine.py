@@ -26,7 +26,8 @@ def recommend(score: float) -> str:
         return "SELL"
 
 
-def run_analysis(ticker: str) -> dict:
+def run_analysis(ticker: str, weights: dict = None) -> dict:
+
     """
     Full pipeline for a given NSE ticker.
     Returns a rich result dict suitable for the dashboard.
@@ -63,8 +64,8 @@ def run_analysis(ticker: str) -> dict:
         bench_df if bench_ok else None,
     )
 
-    # ── Weighted composite ─────────────────────────────────────────────────
-    w = config.WEIGHTS
+       # ── Weighted composite ─────────────────────────────────────────────
+    w = weights if weights is not None else config.WEIGHTS
     final_score = (
         macro_result["score"]  * w["macro"]       +
         fund_result["score"]   * w["fundamental"]  +

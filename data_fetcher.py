@@ -119,11 +119,11 @@ def fetch_macro_data() -> Tuple[Optional[pd.DataFrame], bool]:
 _FUNDAMENTAL_MAP = {
     "pe_ratio":       ["trailingPE",     "forwardPE"],
     "pb_ratio":       ["priceToBook"],
-    "roe":            ["returnOnEquity"],
-    "debt_equity":    ["debtToEquity"],
+    "roe":            ["returnOnEquity", "trailingROE", "ReturnOnEquity"],
+    "debt_equity":    ["debtToEquity",   "totalDebt"],
     "eps":            ["trailingEps",    "forwardEps"],
-    "revenue_growth": ["revenueGrowth"],
-    "profit_margin":  ["profitMargins"],
+    "revenue_growth": ["revenueGrowth",  "earningsGrowth"],
+    "profit_margin":  ["profitMargins",  "netMargins"],
     "market_cap":     ["marketCap"],
     "dividend_yield": ["dividendYield",  "trailingAnnualDividendYield"],
 }
@@ -139,29 +139,58 @@ def _extract(info: dict, keys: list) -> Optional[float]:
 
 
 def fetch_fundamental_data(ticker: str) -> Tuple[dict, bool]:
-    """
-    Pulls fundamental snapshot from yfinance .info.
-    Falls back to None values with success=False if unavailable.
-    """
     yf_ticker = ticker.upper() + ".NS" if "." not in ticker else ticker.upper()
     logger.info("Fetching fundamentals for %s", yf_ticker)
     try:
-        info = yf.Ticker(yf_ticker).info
-        data = {}
+        stock = yf.Ticker(yf_ticker)
+        info  = stock.info
+        data  = {}
+
         for field, keys in _FUNDAMENTAL_MAP.items():
             val = _extract(info, keys)
-            # Normalise debt/equity – yfinance sometimes returns as %
-            if field == "debt_equity" and val is not None and val > 100:
+            if field == "debt_equity" and val is not None:
                 val = val / 100.0
-            # Normalise ROE – sometimes returned as decimal, sometimes %
             if field == "roe" and val is not None and abs(val) > 1.5:
                 val = val / 100.0
             data[field] = val
+
+        # ── Calculate ROE from financials if yfinance didn't provide it ──
+        if data.get("roe") is None:
+            try:
+                financials    = stock.financials      # income statement
+                balance_sheet = stock.balance_sheet   # balance sheet
+
+                # Get most recent Net Income
+                net_income = None
+                for key in ["Net Income", "NetIncome", "Net Income Common Stockholders"]:
+                    if key in financials.index:
+                        net_income = float(financials.loc[key].iloc[0])
+                        break
+
+                # Get most recent Shareholder Equity
+                equity = None
+                for key in ["Stockholders Equity", "Total Stockholders Equity",
+                            "Common Stock Equity", "Total Equity Gross Minority Interest"]:
+                    if key in balance_sheet.index:
+                        equity = float(balance_sheet.loc[key].iloc[0])
+                        break
+
+                if net_income is not None and equity is not None and equity != 0:
+                    data["roe"] = round(net_income / equity, 4)
+                    logger.info("ROE calculated from financials: %.4f", data["roe"])
+                else:
+                    logger.warning("Could not calculate ROE — net_income=%s equity=%s",
+                                   net_income, equity)
+            except Exception as e:
+                logger.warning("ROE calculation from financials failed: %s", e)
 
         has_data = any(v is not None for v in data.values())
         if has_data:
             save_fundamentals(ticker.upper(), data)
         return data, has_data
+
     except Exception as exc:
         logger.error("Fundamental fetch failed for %s: %s", yf_ticker, exc)
         return {k: None for k in _FUNDAMENTAL_MAP}, False
+
+

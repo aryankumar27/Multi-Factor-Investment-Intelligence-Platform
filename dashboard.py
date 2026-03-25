@@ -439,13 +439,10 @@ def main():
         st.session_state.result = None
 
     if run_btn and ticker:
-        import config
-        config.WEIGHTS.update(custom_weights)
-
-        with st.spinner(f"Running MIIP analysis for **{ticker}** …"):
+         with st.spinner(f"Running MIIP analysis for **{ticker}** …"):
             t0 = time.time()
             try:
-                result = run_analysis(ticker)
+                result = run_analysis(ticker, weights=custom_weights)
                 st.session_state.result = result
                 elapsed = time.time() - t0
                 st.success(f"Analysis complete in {elapsed:.1f}s")
@@ -505,11 +502,12 @@ def main():
     # ── Factor score tiles ────────────────────────────────────────────────────
     st.markdown("<div class='section-header'>Factor Scores</div>", unsafe_allow_html=True)
     cols = st.columns(4)
+    w = R.get("weights_used", {"macro":0.25,"fundamental":0.30,"risk":0.25,"sentiment":0.20})
     factor_data = [
-        ("Macro",       R["macro_score"],       "25%", R["macro_detail"]["commentary"]),
-        ("Fundamental", R["fundamental_score"],  "30%", R["fundamental_detail"]["commentary"]),
-        ("Risk",        R["risk_score"],         "25%", R["risk_detail"]["commentary"]),
-        ("Sentiment",   R["sentiment_score"],    "20%", R["sentiment_detail"]["commentary"]),
+        ("Macro",       R["macro_score"],       f"{w['macro']*100:.0f}%",       R["macro_detail"]["commentary"]),
+        ("Fundamental", R["fundamental_score"],  f"{w['fundamental']*100:.0f}%", R["fundamental_detail"]["commentary"]),
+        ("Risk",        R["risk_score"],         f"{w['risk']*100:.0f}%",        R["risk_detail"]["commentary"]),
+        ("Sentiment",   R["sentiment_score"],    f"{w['sentiment']*100:.0f}%",   R["sentiment_detail"]["commentary"]),
     ]
     for col, (label, score, weight, comm) in zip(cols, factor_data):
         with col:
