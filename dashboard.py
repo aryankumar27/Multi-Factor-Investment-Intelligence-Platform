@@ -17,6 +17,11 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import streamlit as st
 
+@st.cache_data(ttl=3600)   # cache for 1 hour
+def cached_analysis(ticker, weights_tuple):
+    weights = dict(weights_tuple)
+    return run_analysis(ticker, weights=weights)
+
 from scoring_engine import run_analysis
 from database import load_history
 
@@ -442,7 +447,8 @@ def main():
          with st.spinner(f"Running MIIP analysis for **{ticker}** …"):
             t0 = time.time()
             try:
-                result = run_analysis(ticker, weights=custom_weights)
+                weights_tuple = tuple(sorted(custom_weights.items()))
+                result = cached_analysis(ticker, weights_tuple)
                 st.session_state.result = result
                 elapsed = time.time() - t0
                 st.success(f"Analysis complete in {elapsed:.1f}s")
