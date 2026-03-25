@@ -10,8 +10,14 @@ from datetime import datetime, timedelta
 from typing import Tuple, Optional
 
 import numpy as np
+import time
 import pandas as pd
 import yfinance as yf
+import requests
+session = requests.Session()
+session.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+})
 
 import config
 from database import save_prices, save_macro, save_fundamentals
@@ -61,7 +67,7 @@ def fetch_price_data(ticker: str) -> Tuple[Optional[pd.DataFrame], bool]:
     logger.info("Fetching prices for %s (%s → %s)", yf_ticker, start, end)
 
     try:
-        raw = yf.download(yf_ticker, start=start, end=end, progress=False, auto_adjust=True)
+        raw = yf.download(yf_ticker, start=start, end=end, progress=False, auto_adjust=True, session=session)
         if raw.empty:
             logger.warning("No price data returned for %s", yf_ticker)
             return None, False
@@ -142,8 +148,18 @@ def fetch_fundamental_data(ticker: str) -> Tuple[dict, bool]:
     yf_ticker = ticker.upper() + ".NS" if "." not in ticker else ticker.upper()
     logger.info("Fetching fundamentals for %s", yf_ticker)
     try:
-        stock = yf.Ticker(yf_ticker)
-        info  = stock.info
+        stock = yf.Ticker(yf_ticker, session=session)
+        info  = {}
+        for attempt in range(3):
+            try:
+                info = stock.info
+                if info and len(info) > 5:
+                    break
+                logger.warning("Attempt %d: empty info, retrying...", attempt + 1)
+                time.sleep(2)
+            except Exception as e:
+                logger.warning("Attempt %d failed: %s", attempt + 1, e)
+                time.sleep(2)
         data  = {}
 
         for field, keys in _FUNDAMENTAL_MAP.items():
